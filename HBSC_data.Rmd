@@ -1,6 +1,6 @@
 ---
 title: "HSBC_data"
-author: "Rikke Uldbæk"
+author: "Rikke Uldbækk"
 date: "9/5/2022"
 output: html_document
 ---
