@@ -1,0 +1,161 @@
+---
+title: "cluster lol"
+author: "LAURA PAAABY"
+date: "10/25/2022"
+output: html_document
+---
+here is me failing to make clusters: 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#loading packages
+pacman::p_load(ggplot2, tidyverse)
+```
+
+
+
+```{r}
+# Loading files from google drive 
+id_2014 <- "1Nes6x0xB-M2tnPu4DA0AJbD0hVuiXDc4" # google file ID - hbsc 2014
+hbsc2014<- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_2014)) # data hbsc 2014
+
+
+```
+
+
+
+### Changing country.no to country name
+Note, there are no data from Turkey and USA, see distribution of answers on page 23-24 of the pdf
+( https://www.uib.no/sites/w3.uib.no/files/attachments/hbsc-2013_14_ed.1.0.pdf )
+```{r}
+hbsc2014$COUNTRYno <- (ifelse(hbsc2014$COUNTRYno == "8000","Albania", ifelse(hbsc2014$COUNTRYno == "40000", "Austria", ifelse(hbsc2014$COUNTRYno == "51000","Armenia", ifelse(hbsc2014$COUNTRYno == "8000","Albania", ifelse(hbsc2014$COUNTRYno == "56001","Belgium (Flemish)", ifelse(hbsc2014$COUNTRYno == "56002","Belgium (French)", ifelse(hbsc2014$COUNTRYno == "100000","Bulgaria", ifelse(hbsc2014$COUNTRYno == "124000","Canada", ifelse(hbsc2014$COUNTRYno == "191000","Croatia",ifelse(hbsc2014$COUNTRYno == "203000","Czech Republic",ifelse(hbsc2014$COUNTRYno == "208000","Denmark",ifelse(hbsc2014$COUNTRYno == "233000","Estonia",ifelse(hbsc2014$COUNTRYno == "246000","Finland",ifelse(hbsc2014$COUNTRYno == "250000","France",ifelse(hbsc2014$COUNTRYno == "276000","Germany",ifelse(hbsc2014$COUNTRYno == "300000","Greece",ifelse(hbsc2014$COUNTRYno == "304000","Greenland",ifelse(hbsc2014$COUNTRYno == "348000","Hungary",ifelse(hbsc2014$COUNTRYno == "352000","Iceland",ifelse(hbsc2014$COUNTRYno == "372000","Ireland",ifelse(hbsc2014$COUNTRYno == "376000","Israel",ifelse(hbsc2014$COUNTRYno == "380000","Italy",ifelse(hbsc2014$COUNTRYno == "428000","Latvia",ifelse(hbsc2014$COUNTRYno == "440000","Lithuania",ifelse(hbsc2014$COUNTRYno == "442000","Luxembourg",ifelse(hbsc2014$COUNTRYno == "470000","Malta",ifelse(hbsc2014$COUNTRYno == "498000","Republic of Moldova",ifelse(hbsc2014$COUNTRYno == "528000","Netherlands",ifelse(hbsc2014$COUNTRYno == "578000","Norway",ifelse(hbsc2014$COUNTRYno == "616000","Poland",ifelse(hbsc2014$COUNTRYno == "620000","Portugal",ifelse(hbsc2014$COUNTRYno == "642000","Romania",ifelse(hbsc2014$COUNTRYno == "643000","Russia",ifelse(hbsc2014$COUNTRYno == "703000","Slovakia",ifelse(hbsc2014$COUNTRYno == "705000","Slovenia",ifelse(hbsc2014$COUNTRYno == "724000","Spain",ifelse(hbsc2014$COUNTRYno == "752000","Sweden",ifelse(hbsc2014$COUNTRYno == "756000","Switzerland",ifelse(hbsc2014$COUNTRYno == "792000","Turkey",ifelse(hbsc2014$COUNTRYno == "804000","Ukraine",ifelse(hbsc2014$COUNTRYno == "807000","Macedonia",ifelse(hbsc2014$COUNTRYno == "826001","England",ifelse(hbsc2014$COUNTRYno == "826002","Scotland",ifelse(hbsc2014$COUNTRYno == "826003","Wales",ifelse(hbsc2014$COUNTRYno == "840000","USA", NA))))))))))))))))))))))))))))))))))))))))))))))
+
+```
+
+
+
+**ideas**
+CLASSIFIER - can we classify which country you live in based on your eating habits? 
+CLUSTERING - how does nutrition/food habits impact life satisfaction across countries?
+
+*lets try some clustering*:
+```{r}
+#select a subset of the variables
+clean_2014 <- hbsc2014 %>%
+  drop_na(c("lifesat", "ondiet", "COUNTRYno")) %>% 
+  mutate(lifesat = as.numeric(lifesat)) %>% 
+  mutate(ondiet = as.numeric(ondiet)) %>% 
+  mutate(country_number = as.numeric(as.factor(COUNTRYno))) %>% 
+  select(lifesat, ondiet, country_number)
+
+
+  
+
+vari_subset<- clean_2014[,c("lifesat", "ondiet")]
+
+#let's compute the 3 clusters
+km <- kmeans(vari_subset, centers = 3)
+
+
+km
+
+```
+
+```{r}
+library(factoextra)
+
+fviz_cluster(km, data = clean_2014, label= NULL)+theme_bw()
+
+?fviz_cluster
+```
+
+
+
+
+
+
+lets follow the workflow of the iris:
+ Data preparation
+```{r}
+data("iris")
+head(iris)
+
+# Remove species column (5) and scale the data
+iris.scaled <- scale(iris[, -5])
+head(iris.scaled)
+
+iris[, -5]
+```
+```{r}
+#### lets do the selection of columns and scaling for ours:
+#select a subset of the variables
+cluster_dat <- hbsc2014 %>%
+  drop_na(c("sweets", "ondiet", "vegetables", "fruits")) %>% 
+  #mutate(country_number = as.numeric(as.factor(COUNTRYno))) %>%  ## lets leave out country for a sec
+  select(sweets, ondiet, vegetables, fruits) %>% 
+    ### lets now scale it:
+  mutate(fruits = scale(fruits),
+         sweets = scale(sweets),
+         ondiet = scale(ondiet), 
+         vegetables = scale(vegetables))
+  
+head(cluster_dat)
+```
+
+# K-means clustering
+```{r}
+km.variables <- kmeans(cluster_dat, 3, nstart = 10)
+```
+
+# Lets figure out the optimal number of clusters are:
+```{r}
+fviz_nbclust(cluster_dat, kmeans, method = "silhouette",  k.max = 10)
+```
+
+
+
+# Visualize kmeans clustering
+# use repel = TRUE to avoid overplotting
+```{r}
+fviz_cluster(km.variables, cluster_dat, ellipse.type = "norm")
+```
+
+
+
+
+# Change the color palette and theme
+fviz_cluster(km.res, iris[, -5],
+   palette = "Set2", ggtheme = theme_minimal())
+
+ ## Not run: 
+# Show points only
+fviz_cluster(km.res, iris[, -5], geom = "point")
+# Show text only
+fviz_cluster(km.res, iris[, -5], geom = "text")
+
+# PAM clustering
+# ++++++++++++++++++++
+require(cluster)
+pam.res <- pam(iris.scaled, 3)
+ # Visualize pam clustering
+fviz_cluster(pam.res, geom = "point", ellipse.type = "norm")
+
+# Hierarchical clustering
+# ++++++++++++++++++++++++
+# Use hcut() which compute hclust and cut the tree
+hc.cut <- hcut(iris.scaled, k = 3, hc_method = "complete")
+# Visualize dendrogram
+fviz_dend(hc.cut, show_labels = FALSE, rect = TRUE)
+# Visualize cluster
+fviz_cluster(hc.cut, ellipse.type = "convex")
+
+
+```{r}
+
+```
+
+
+
+
+
+

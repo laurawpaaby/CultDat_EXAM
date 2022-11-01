@@ -9,9 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 
 #loading packages
-pacman::p_load(ggplot2, tidyverse)
-
-setwd("~/Desktop/OneDrive - Aarhus Universitet/Cognitive Science/5th semester/Cultural Datascience/EXAM") 
+pacman::p_load(ggplot2, tidyverse, lme4)
 ```
 
 
@@ -34,81 +32,191 @@ hbsc2006<- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", 
 
 id_2001 <- "1c8toBLgCl5BLy6yGUkDlpK_XK0i1E5pV" # google file ID - hbsc 2001
 hbsc2001<- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_2001)) # data hbsc 2001
-ls.str(hbsc2001)
 
 ```
 
 
-### Overview
+#### TO ALL TIMES
+we wanna plot the life satisfaction across all times for five countries (Macedonia (807000), Denmark (208000), England (826001), Spanien (724000), Lithuania (440000), Greece(300000)), to do so we gotta figure out what data is available at all times:
+
+
+**Finding the countries who occurs in all frames**
 ```{r}
-ls.str(hbsc2014)
+###### finding out which countries are measured to all times:
+coun_2001 <- unique(hbsc2001$countryno)
+coun_2006 <- unique(hbsc2006$countryno)
+coun_2010 <- unique(hbsc2010$countryno)
+coun_2014 <- unique(hbsc2014$COUNTRYno)
+
+
+all_count <- Reduce(intersect, list(coun_2001,coun_2006,coun_2010, coun_2014))
+all_count
 ```
 
-_Interessante ideer?_
-- Diet and nutrition in school-aged children across countries ?
+ Denmark (208000), Greece (300000), Spain (724000), England (826001), Latvia (428000), Ukraine (80400)  
+
+**Making new df of the countries of interest**
 ```{r}
-head(hbsc2014$breakfastwd) #breakfast weekdays
-head(hbsc2014$breakfastwe) #breakfast weekends
-head(hbsc2014$fruits) # eat fruits 
-head(hbsc2014$vegetables) #eat vegetables
-head(hbsc2014$sweets) #eat sweets
-head(hbsc2014$softdrinks) #drink coke/soft drinks
-head(hbsc2014$m11) #family meal breakfast
-head(hbsc2014$m12) #family meal evening
-head(hbsc2014$ondiet) #on a diet
-head(hbsc2014$toothbr) #tooth brushing
+##### 2001
+dat2001 <- hbsc2001 %>% 
+  filter(countryno == 208000 | countryno == 300000 | countryno == 724000 | countryno == 826001 | countryno == 428000 | countryno == 80400) 
+  
+
+##### 2006
+dat2006 <- hbsc2006 %>% 
+   filter(countryno == 208000 | countryno == 300000 | countryno == 724000 | countryno == 826001 | countryno == 428000 | countryno == 80400) 
+  
+
+##### 2010
+dat2010 <- hbsc2010 %>% 
+   filter(countryno == 208000 | countryno == 300000 | countryno == 724000 | countryno == 826001 | countryno == 428000 | countryno == 80400) 
+  
+
+##### 2014
+dat2014 <- hbsc2014 %>% 
+   filter(COUNTRYno == 208000 | COUNTRYno == 300000 | COUNTRYno == 724000 | COUNTRYno == 826001 | COUNTRYno == 428000 | COUNTRYno == 80400) %>% 
+  rename(countryno = COUNTRYno,
+         surveyyear = year) # renaming it to match the others 
+
+
 ```
 
-- Life satisfaction
-- Sleep difficulty? 
+### *RENAMING* 
 ```{r}
-#sleep variables
-head(hbsc2014$sleepdifficulty) #difficulties in sleeping
+# LETS rename the countries in a function:
+rename_func <- function(data){
 
+data$country_name <- (ifelse(data$countryno == "208000","Denmark", ifelse(data$countryno == "300000", "Greece", ifelse(data$countryno == "724000","Spain", ifelse(data$countryno == "826001","England", ifelse(data$countryno == "428000","Latvia", ifelse(data$countryno == "80400", "Ukraine", NA)))))))
+
+return(data)
+                                                                                                                          
+}
 ```
 
-- Mental health
+using the function and checking that all df has the countries we are looking for: 
 ```{r}
-head(hbsc2014$thinkbody) #think about body
-head(hbsc2014$headache) #headache
-head(hbsc2014$stomachache) #stomachache
-head(hbsc2014$backache) #backache
-head(hbsc2014$feellow) #feeling low
-head(hbsc2014$irritable) #irritability or bad temper
-head(hbsc2014$nervous) #feeling nervous
-head(hbsc2014$sleepdifficulty) #difficulties in sleeping
-head(hbsc2014$dizzy) # feeling dizzy
-head(hbsc2014$health) #health
-head(hbsc2014$lifesat) #life satisfaction
+# dat2001
+dat2001 <- rename_func(dat2001)
+unique(dat2001$country_name)
 
-hist(hbsc2014$lifesat)
-length(which(!is.na(hbsc2014$lifesat))) #205953 responses, ~ 8000 NA's 
+# dat2006
+dat2006 <- rename_func(dat2006)
+unique(dat2006$country_name)
 
+# dat2010
+dat2010 <- rename_func(dat2010)
+unique(dat2010$country_name)
 
-#Quick try
-new <- hbsc2014 %>% 
-  filter(COUNTRYno == c("Denmark", "Sweden", "Norway", "Finland"))
-
-
-scandinavian_model <- glm(lifesat ~ sleepdificulty + nervous + irritable +thinkbody+ dizzy + health +feellow+headache +stomachache+ backache, data= new)
-summary(scandinavian_model)
-
-
+# dat2014
+dat2014 <- rename_func(dat2014)
+unique(dat2014$country_name)
 ```
 
+lets try to *PLOT* stuff:
 
-- Drinking culture
-
-- Sex
 ```{r}
-head(hbsc2014$agesex)
-length(which(!is.na(hbsc2014$agesex))) #only 13417 answers
+library(ggpubr)
+
+#quick plot
+plot2014 <- ggplot(data = dat2014, aes(x= country_name, y=lifesat, fill = country_name))+
+  geom_histogram(stat="identity")+
+  labs(x = "Country", y = "Life Satisfaction", title = "2014")+
+  theme_minimal()
+
+plot2010 <- ggplot(data = dat2010, aes(x= country_name, y=lifesat, fill = country_name))+
+  geom_histogram(stat="identity")+
+  labs(x = "Country", y = "Life Satisfaction", title = "2010")+
+  theme_minimal()
+
+plot2006 <- ggplot(data = dat2006, aes(x= country_name, y=lifesat, fill = country_name))+
+  geom_histogram(stat="identity")+
+  labs(x = "Country", y = "Life Satisfaction", title = "2006")+
+  theme_minimal()
+
+plot2001 <- ggplot(data = dat2001, aes(x= country_name, y=lifesat, fill = country_name))+
+  geom_histogram(stat="identity")+
+  labs(x = "Country", y = "Life Satisfaction", title = "2001")+
+  theme_minimal()
+
+ggarrange(plot2014, plot2010, plot2006, plot2001, common.legend = TRUE)
+```
+Okay maybe greece should be replaced or deleted....
+
+
+
+#### Lets turn it around - ALL TIMES IN ONE DF:
+okay this is actually doable, as done below, however I must violate A LOT of column names when doing so .... 
+```{r}
+# creating the column id for dataframe 1
+df01 = cbind("id"=rownames(dat2001),dat2001)
+df06 = cbind("id"=rownames(dat2006),dat2006)
+df10 = cbind("id"=rownames(dat2010),dat2010)
+df14 = cbind("id"=rownames(dat2014),dat2014)
+ 
+df1_6 <- merge(df01, df06, all=T)
+df10_14 <- merge(df10, df14, all=T)
+
+HUGE_DF <- merge(df10_14, df1_6, all = T) 
 
 ```
 
 
-_Others have done:_
-- Trends of overweight and obesity, physical activity and sedentary behaviour in Czech schoolchildren: HBSC study
+*plot*
+```{r}
+#quick SPAIN plot
+spain_dat <- HUGE_DF %>% 
+  filter(country_name == "Spain")
+
+spain_plot <- ggplot(data = spain_dat, aes(x= surveyyear, y=lifesat, colour = surveyyear))+
+  geom_histogram(stat="identity")+
+  labs(x = "Time in Years", y = "Life Satisfaction", title = "Spain")+
+  theme_minimal()
+
+
+### DENMARK 
+dk_dat <- HUGE_DF %>% 
+  filter(country_name == "Denmark")
+
+dk_plot <- ggplot(data = dk_dat, aes(x= surveyyear, y=lifesat, colour = surveyyear))+
+  geom_histogram(stat="identity")+
+  labs(x = "Time in Years", y = "Life Satisfaction", title = "Denmark")+
+  theme_minimal()
+
+
+##### ENGLAND 
+eng_dat <- HUGE_DF %>% 
+  filter(country_name == "England")
+
+
+eng_plot <- ggplot(data = eng_dat, aes(x= surveyyear, y=lifesat, colour = surveyyear))+
+  geom_histogram(stat="identity")+
+  labs(x = "Time in Years", y = "Life Satisfaction", title = "England")+
+  theme_minimal()
+
+
+
+#####  Latvia 
+lat_dat <- HUGE_DF %>% 
+  filter(country_name == "Latvia")
+
+lat_plot <- ggplot(data = lat_dat, aes(x= surveyyear, y=lifesat, colour = surveyyear))+
+  geom_histogram(stat="identity")+
+  labs(x = "Time in Years", y = "Life Satisfaction", title = "Latvia")+
+  theme_minimal()
+
+
+
+
+ggarrange(dk_plot, spain_plot, lat_plot, eng_plot, common.legend = TRUE)
+```
+
+
+
+
+
+
+
+
 
 
 
@@ -120,16 +228,96 @@ hbsc2014$COUNTRYno <- (ifelse(hbsc2014$COUNTRYno == "8000","Albania", ifelse(hbs
 
 ```
 
+```{r}
+
+```
 
 
+
+### Overview
+```{r}
+#ls.str(hbsc2014)
+```
+
+
+#### CLEAN DATA 
+A long and tidy process, that i have already started, so lets just go with that data ... 
+
+lets make a clean data subset of variables of interest: 
+```{r}
+#subset the important variables (nutrition, socioeconomic factors, social environmental factors, individual factors )
+subset_df2014 <- hbsc2014 %>% 
+  select(UniqueID,AGE, sex, 
+         stomachache, sleepdificulty, nervous, backache, 
+         dizzy,lifesat,feellow,irritable, health, # all ^^ about mental health  
+         likeschool,grade, schoolpressure,  # about school
+         friendtalk, friendshare, friendhelp, friendcounton, # about friends
+         employfa, employnotfa, employmo,employnotmo, # socioeconomics of parents
+         compusewd, compusewe, cbullmess, # computer
+         breakfastwd, breakfastwe, fruits, toothbr,sweets, vegetables, ondiet, # food
+         thinkbody, 
+         beenbullied, cbullpict # bullying 
+         )
+  
+
+##############Identify and remove/ replace NA's
+
+### LETS GET RID OF NA'S AND INSTEAD PUT IN MEANS:
+subset_df2014[subset_df2014==-99] <- NA #some rows may contain -99 instead of NA (replace then)
+subset_df2014[subset_df2014=="NaN"] <- NA #some rows may contain NaN instead of NA (replace then)
+
+dat2014 <- subset_df2014  # Duplicate data frame
+
+# Replace NA in all columns in loop
+for(i in 1:ncol(subset_df2014)) { 
+  dat2014[ , i][is.na(dat2014[ , i])] <- mean(dat2014[ , i], na.rm = TRUE)
+} 
+
+### okay it makes it numeric, so lets round them down:
+dat2014 <- dat2014 %>% 
+  round(digits = 0)
+
+### lets now add country - could not be done before:
+dat2014 <- cbind(dat2014, country = hbsc2014$COUNTRYno)  
+  
+
+```
+
+
+- Mental health
+```{r}
+#Quick try
+new <- dat2014
+
+new <- new %>% 
+  filter(country == c("Denmark", "Armenien", "Hungary", "Finland"))
+
+hist(new$lifesat, breaks = 10)
+
+ggplot(new, aes(lifesat)) + 
+  geom_histogram(aes(y = ..density..)) +
+  geom_density()
+
+?hist
+
+#### 
+scandinavian_model <- lmer(lifesat ~ fruits + vegetables + ondiet + (1|country), data= new)
+summary(scandinavian_model)
+```
+
+
+
+
+## **FUN PLOTS**
 ```{r}
 #loading packages
 pacman::p_load(ggplot2, tidyverse)
 
 #quick plot
-ggplot(data = hbsc2014, aes(x= sex, y=drunk, colour = COUNTRYno ))+ geom_histogram(stat="identity")+
-  facet_wrap(~COUNTRYno)+
-  labs(x = "x", y = "y")+
+ggplot(data = dat2014, aes(x= sex, y=toothbr, colour = country ))+
+  geom_histogram(stat="identity")+
+  #facet_wrap(~country)+
+  labs(x = "Gender", y = "ToothBrush")+
   ggtitle("Per country")+
   theme_minimal()
 
@@ -144,13 +332,206 @@ sd = sd(hbsc2014$softdrinks)), colour = "red", size = 1) + theme_bw()+
 
 
 ggplot(hbsc2014, aes(lifesat, colour = COUNTRYno)) +
-geom_histogram(aes(y = ..density..)) + stat_function(fun = dnorm, args = list(mean = mean(df$balloon),
-sd = sd(hbsc2014$softdrinks)), colour = "red", size = 1) + theme_bw()+
+geom_histogram(aes(y = ..density..)) + theme_bw()+
   facet_wrap(~COUNTRYno)+
-  labs(x = "Softdrinks", y = "y")+
+  labs(x = "Life Satisfaction", y = "y")+
   ggtitle("Life satisfaction score per country")+
   theme_minimal()
 
 
 ```
+
+
+
+
+
+
+#### CHECK FOR CORRELATIONS 
+In order to sum one variable up to reflect several others, we must check if such variables even correlate to a such extent that something should be done:
+
+Mental health could be reflected by several parameters, here I just test a few of them for fun:
+First lets just combine the variables in a dataframe:
+```{r}
+cor_dat <- dat2014 %>% 
+  select(lifesat, irritable, nervous, feellow, headache, stomachache, backache, sleepdificulty)
+
+#### making correlation matrix:
+cormat <- round(cor(cor_dat),2)
+head(cormat)
+```
+
+now we got the matrix, it should be *melted* to be plottet - why? i dunno...
+```{r}
+melted_cormat <- melt(cormat)
+head(melted_cormat)
+
+library(ggplot2)
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile()
+```
+
+Note that, a correlation matrix has redundant information. We’ll use the functions below to set half of it to NA.
+Helper functions :
+```{r}
+# Get lower triangle of the correlation matrix
+  get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+  }
+  # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+  
+# now that we have this, we can get the upper tri:
+upper_tri <- get_upper_tri(cormat)
+upper_tri
+
+```
+
+
+```{r}
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+##### we wanna do the cool plot in the bottom:
+reorder_cormat <- function(cormat){
+# Use correlation between variables as distance
+dd <- as.dist((1-cormat)/2)
+hc <- hclust(dd)
+cormat <-cormat[hc$order, hc$order]
+}
+
+# Heatmap
+# Reorder the correlation matrix
+cormat <- reorder_cormat(cormat)
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+
+
+#### NOW LETS ADD THE CORRELATION:
+ggheatmap + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+theme(
+  axis.title.x = element_blank(), ### all these element blank just make it look better, since the it just removed names, grids etc. 
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5))
+```
+Okay so actually they correlate minimally whith one another ..... so the reason to merge them into one maybe isn't there.... 
+
+
+
+
+#### lets make a function that does this:
+
+```{r}
+cor_mat_func <- function(data, a, b,c,d,e,f,g,h) {
+  
+  #### first lets get the cor matrix out of the data:
+  cor_dat <- data %>% 
+  select(a,b,c,d,e,f,g,h)
+
+  #### making correlation matrix:
+  cormat <- round(cor(cor_dat),2)
+  head(cormat)
+  return(cormat)
+  
+  #### melting the data to get it plottable:
+  melted_cormat <- melt(cormat)
+  
+    # Get lower triangle of the correlation matrix
+    get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+    }
+    # Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+    }
+  
+  
+  # now that we have this, we can get the upper tri:
+  upper_tri <- get_upper_tri(cormat)
+  
+  # Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+      ##### we wanna do the cool plot in the bottom:
+    reorder_cormat <- function(cormat){
+    # Use correlation between variables as distance
+    dd <- as.dist((1-cormat)/2)
+      hc <- hclust(dd)
+      cormat <-cormat[hc$order, hc$order]
+      }
+
+    # Heatmap
+  # Reorder the correlation matrix
+cormat <- reorder_cormat(cormat)
+upper_tri <- get_upper_tri(cormat)
+# Melt the correlation matrix
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+# Create a ggheatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+
+
+#### NOW LETS ADD THE CORRELATION:
+nice_heat_map <- ggheatmap + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+theme(
+  axis.title.x = element_blank(), ### all these element blank just make it look better, since the it just removed names, grids etc. 
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5))
+
+return(nice_heat_map)
+}
+```
+
+
+```{r}
+cor_mat_func(dat2014, "lifesat", "irritable", "nervous", "feellow", "headache", "stomachache", "backache", "sleepdificulty")
+```
+
+
+
+
+
 
