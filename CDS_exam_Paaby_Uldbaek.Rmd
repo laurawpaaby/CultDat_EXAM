@@ -1,0 +1,278 @@
+---
+title: "Cultural Data Science - Exam Project"
+subtitle: 'Health Behaviour in School-aged Children'
+author: "Laura Wulff Paaby & Rikke Uldbæk"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  blogdown::html_page:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#loading packages
+pacman::p_load(ggplot2, tidyverse, lme4)
+
+setwd("~/Library/Mobile Documents/com~apple~CloudDocs/Cognitive Science/5th semester/CDS_EXAM/CultDat_EXAM")
+```
+
+
+## Loading Data
+
+The data is loaded from the cloud service Google Drive. 
+```{r}
+# Loading files from google drive 
+id_2014 <- "1Nes6x0xB-M2tnPu4DA0AJbD0hVuiXDc4" # google file ID - hbsc 2014
+hbsc2014<- read.csv(sprintf("https://docs.google.com/uc?id=%s&export=download", id_2014)) # data hbsc 2014
+```
+
+
+## Data Preprocessing 
+In this section, appropriate filtering and pre-processing of the data will be carried out. 
+
+
+### Countries of Interest
+The countries of interest in this paper are: Denmark, Italy, Spain, England, Latvia. In the hbsc2014 dataframe, all countries are denoted with a country-number, however this is rather confusing, thus we rename the country-number in accordance with the actual country-name (Denmark = 208000, Italy = 380000, Spain = 724000, England = 826001, Latvia = 428000)  
+
+```{r}
+# Filtering the five countries 
+dat2014 <- hbsc2014 %>% 
+   filter(COUNTRYno == 208000 | COUNTRYno == 380000 | COUNTRYno == 724000 | COUNTRYno == 826001 | COUNTRYno == 428000 ) %>% 
+  rename(countryno = COUNTRYno,
+         surveyyear = year,
+         uniqueid = UniqueID) # renaming it to match the others 
+
+# a little data was collected in 2013, this is renamed to 2014 for further analysis
+dat2014$surveyyear <- ifelse(dat2014$surveyyear== 2013, 2014, 2014)# making all data from 2013 into 2014
+```
+Apparently England had some data from 2013 as the only country, we changed this data to being 2014
+
+
+```{r}
+# renaming countries in a function
+rename_func <- function(data){
+data$country_name <- (ifelse(data$countryno == "208000","Denmark", ifelse(data$countryno == "380000", "Italy", ifelse(data$countryno == "724000","Spain", ifelse(data$countryno == "826001","England", ifelse(data$countryno == "428000","Latvia", ifelse(data$countryno == "80400", "Ukraine", NA)))))))
+return(data)                                                                
+}
+
+#using the function and checking data 
+# dat2014
+dat2014 <- rename_func(dat2014)
+unique(dat2014$country_name)
+```
+
+
+
+### Further Subsetting
+First we will subset the data of interest for model building.
+```{r}
+#Check we only have data from 2014
+unique(hbsc2014$HBSC)
+
+#subset the important variables 
+subset_df2014 <- dat2014 %>% 
+  select(uniqueid,AGE,sex, #general variables
+         lifesat,#mental health variable
+         breakfastwd, breakfastwe, fruits, toothbr,sweets, vegetables, ondiet# nutritional variables
+         )
+
+```
+
+
+### Replace NAs
+Then we will identify and replace NA's with the mean
+```{r}
+#Replace NA's with mean (note makes everything numeric)
+subset_df2014[subset_df2014==-99] <- NA #some rows may contain -99 instead of NA (replace then)
+subset_df2014[subset_df2014=="NaN"] <- NA #some rows may contain NaN instead of NA (replace then)
+
+subset_df2014 <- subset_df2014 %>% 
+  mutate_if(is.numeric, ~replace_na(.,mean(., na.rm = TRUE))) %>% 
+  round(digits = 0)
+```
+
+Finally country-name is added to the dataframe since it disturbed previous work by being a character class
+```{r}
+#Adding country to the dataframe 
+subset_df2014 <- cbind(subset_df2014, country= dat2014$country_name)
+
+#making country a factor
+subset_df2014$country <- as.factor(subset_df2014$country)
+```
+
+
+### Plotting Countries
+```{r}
+country_plot<- ggplot(subset_df2014, aes(x= country, y=lifesat, colour =country)) + geom_point(stat="summary", fun.y="mean") + 
+  geom_errorbar(aes(width = 0.1), stat="summary", fun.data="mean_se", fun.args = list(mult = 10))+ggtitle("")+
+  stat_summary(fun.y=mean, aes(group=1), geom="line", colour="grey") +
+  stat_summary(fun.y=mean, aes(group=1), geom="point", colour="grey", size=1)+
+  labs(x = "Countries", y = "Life Satisfaction") + theme(text=element_text(size=13, family="Georgia"))
+  
+#rename legend
+update_labels(country_plot, list(colour="Country"))
+```
+
+
+
+## Analysis
+In this section we will model nutritional factors and mental health in order to investigate their relationship.
+
+### Models
+Various of models are constructed to model nutritional factors on mental health in order to find the best fitting model.
+```{r}
+## mental health ~ nutritional factors
+
+#####country as random intercept
+MH_m1 <- lmer(lifesat ~ breakfastwd + (1 | country), subset_df2014)
+MH_m2 <- lmer(lifesat ~ breakfastwd+ breakfastwe+ (1 | country), subset_df2014)
+MH_m3 <- lmer(lifesat ~ breakfastwd+ breakfastwe+ fruits+ (1 | country), subset_df2014)
+MH_m4 <- lmer(lifesat ~ breakfastwd+ breakfastwe+ fruits+ ondiet +(1 | country), subset_df2014)
+MH_m5 <- lmer(lifesat ~ breakfastwd+ breakfastwe+ fruits+ ondiet + sweets + (1 | country), subset_df2014)
+MH_m6 <- lmer(lifesat ~ breakfastwd+ breakfastwe+ fruits+ ondiet + sweets + vegetables + (1 | country), subset_df2014)
+
+
+######country as fixed effects
+MH_m7 <- lm(lifesat ~ breakfastwd + country, subset_df2014)
+MH_m8 <- lm(lifesat ~ breakfastwd+ breakfastwe+ country, subset_df2014)
+MH_m9 <- lm(lifesat ~ breakfastwd+ breakfastwe+ fruits+ country, subset_df2014)
+MH_m10 <- lm(lifesat ~ breakfastwd+ breakfastwe+ fruits+ ondiet +country, subset_df2014)
+MH_m11 <- lm(lifesat ~ breakfastwd+ breakfastwe+ fruits+ ondiet + sweets + country, subset_df2014)
+MH_m12 <- lm(lifesat ~ breakfastwd+ breakfastwe+ fruits+ ondiet + sweets + vegetables + country, subset_df2014)
+
+######interactions
+MH_m13 <- lm(lifesat ~ fruits:vegetables + country, subset_df2014)
+MH_m14 <- lm(lifesat ~ ondiet:vegetables + country, subset_df2014)
+MH_m15 <- lm(lifesat ~ sweets:vegetables + country, subset_df2014)
+MH_m16 <- lm(lifesat ~ breakfastwd:vegetables + country, subset_df2014)
+MH_m17 <- lm(lifesat ~ breakfastwe:vegetables + country, subset_df2014)
+MH_m18 <- lm(lifesat ~ ondiet:fruits + country, subset_df2014)
+MH_m19 <- lm(lifesat ~ ondiet:sweets + country, subset_df2014)
+MH_m20 <- lm(lifesat ~ ondiet:breakfastwd + country, subset_df2014)
+MH_m21 <- lm(lifesat ~ ondiet:breakfastwe + country, subset_df2014)
+MH_m22 <- lm(lifesat ~ sweets:fruits + country, subset_df2014)
+MH_m23 <- lm(lifesat ~ sweets:breakfastwd + country, subset_df2014)
+MH_m24 <- lm(lifesat ~ sweets:breakfastwe + country, subset_df2014)
+MH_m25 <- lm(lifesat ~ breakfastwd:fruits + country, subset_df2014)
+MH_m26 <- lm(lifesat ~ breakfastwe:fruits + country, subset_df2014)
+MH_m27 <- lm(lifesat ~ breakfastwd:breakfastwe + country, subset_df2014)
+MH_m28 <- lm(lifesat ~  country:sweets, subset_df2014)
+MH_m29 <- lm(lifesat ~  country:fruits, subset_df2014)
+MH_m30 <- lm(lifesat ~  country:vegetables, subset_df2014)
+MH_m31 <- lm(lifesat ~  country:ondiet, subset_df2014)
+MH_m32 <- lm(lifesat ~  country:breakfastwd, subset_df2014)
+MH_m33 <- lm(lifesat ~  country:breakfastwe, subset_df2014)
+```
+
+### Model Comparison
+
+In this section we will compare the best fitting models. 
+```{r}
+anova(MH_m1, MH_m2,MH_m3, MH_m4, MH_m5, MH_m6, MH_m7, MH_m8,MH_m9,MH_m10, MH_m11, MH_m12, MH_m13, MH_m14, MH_m15, MH_m16, MH_m17, MH_m18, MH_m19, MH_m20, MH_m21, MH_m22, MH_m23, MH_m24, MH_m25, MH_m26, MH_m27, MH_m28, MH_m29, MH_m30, MH_m31, MH_m32, MH_m33)
+```
+
+Evaluating the mental health model using AIC and BIC
+```{r}
+#writing AIC values down
+MH_aic <- AIC(MH_m1, MH_m2,MH_m3, MH_m4, MH_m5, MH_m6, MH_m7, MH_m8,MH_m9,MH_m10, MH_m11, MH_m12, MH_m13, MH_m14, MH_m15, MH_m16, MH_m17, MH_m18, MH_m19, MH_m20, MH_m21, MH_m22, MH_m23, MH_m24, MH_m25, MH_m26, MH_m27, MH_m28, MH_m29, MH_m30, MH_m31, MH_m32, MH_m33)
+
+
+#writing down BIC values
+MH_bic <- BIC(MH_m1, MH_m2,MH_m3, MH_m4, MH_m5, MH_m6, MH_m7, MH_m8,MH_m9,MH_m10, MH_m11, MH_m12, MH_m13, MH_m14, MH_m15, MH_m16, MH_m17, MH_m18, MH_m19, MH_m20, MH_m21, MH_m22, MH_m23, MH_m24, MH_m25, MH_m26, MH_m27, MH_m28, MH_m29, MH_m30, MH_m31, MH_m32, MH_m33)
+
+
+#putting results into one dataframe:
+MH_df <- tibble(Model = c("MH_m1", "MH_m2","MH_m3", "MH_m4", "MH_m5", "MH_m6", "MH_m7", "MH_m8","MH_m9","MH_m10", "MH_m11", "MH_m12", "MH_m13", "MH_m14", "MH_m15", "MH_m16", "MH_m17", "MH_m18", "MH_m19", "MH_m20", "MH_m21", "MH_m22", "MH_m23", "MH_m24", "MH_m25", "MH_m26", "MH_m27", "MH_m28", "MH_m29", "MH_m30", "MH_m31", "MH_m32", "MH_m33"), AIC=MH_aic$AIC, BIC=MH_bic$BIC)
+
+view(MH_df) #Best model 
+```
+
+The best model that performs the best is Model 12 (MH_m12) with a BIC = 120043.8 and AIC = 119944.1, p < .001. However, Model 6 (MH_m6) makes conceptually better sense as we allow each country to vary sense, likewise does it only perform minimally worse than Model 12 with a BIC= 120085.8 and AIC = 120011.0, p < .001.
+
+### Checking assumptions
+We will check the following assumptions for Multiple Regression
+  \- Linarity
+  \- Homoschedasticity 
+  \- Normality of residuals
+
+__Linearity__ 
+It’s called “linear model” for a reason! 
+If data is NOT linear, a residual plot will indicate some kind of curve, or it will indicate some other pattern (e.g., two lines if you have categorical binary data).
+  -no patterns or curves  PLEASE!!!
+```{r}
+#residual plot 
+plot(MH_m6)
+```
+
+__Homoschedasticity__
+It says that the variability of your data should be approximately equal across the range of your predicted values (we want equal variances). If homoscedasticity is violated, you end up with heteroskedasticity, or, in other words, a problem with unequal variances.
+- look at the plot "residuals VS fitted"
+    - WE WANT A CLOUD OF DOTS!
+
+```{r}
+#make residual plot
+plot(MH_m6)
+```
+
+
+__Normality of residuals__
+.. the least important.. it turns out that linear models are relatively robust against violations of the assumptions of normality. 
+
+How to check it? 
+- histograms and qq-plot of model
+```{r}
+#histogram of model
+hist(residuals(MH_m6)) #bell shaped =normal
+
+#checking numerically
+residuals <- resid(MH_m6) #should have a mean around 0
+summary(residuals)
+
+# Q-Q plot of model
+qqnorm(residuals(MH_m6)) #dots fall in a line = normal
+
+```
+
+## Results
+
+### Results of the Model
+
+```{r}
+#printing summary of the model
+summary(MH_m6)
+```
+
+
+### Cross Country Stats
+
+Calculating mean and standard deviation of life satisfaction for each country
+```{r}
+#Denmark 
+mean(subset_df2014[subset_df2014$country == 'Denmark', 'lifesat'])
+sd(subset_df2014[subset_df2014$country == 'Denmark', 'lifesat'])
+
+#England
+mean(subset_df2014[subset_df2014$country == 'England', 'lifesat'])
+sd(subset_df2014[subset_df2014$country == 'England', 'lifesat'])
+
+
+#Italy
+mean(subset_df2014[subset_df2014$country == 'Italy', 'lifesat'])
+sd(subset_df2014[subset_df2014$country == 'Italy', 'lifesat'])
+
+#Latvia
+mean(subset_df2014[subset_df2014$country == 'Latvia', 'lifesat'])
+sd(subset_df2014[subset_df2014$country == 'Latvia', 'lifesat'])
+
+#Spain
+mean(subset_df2014[subset_df2014$country == 'Spain', 'lifesat'])
+sd(subset_df2014[subset_df2014$country == 'Spain', 'lifesat'])
+```
+
+
